@@ -1,0 +1,2918 @@
+﻿=== FILE: me\pepperbell\continuity\api\client\CachingPredicates.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1268
+ *  net.minecraft.class_1294
+ *  net.minecraft.class_1297
+ *  net.minecraft.class_1309
+ *  net.minecraft.class_1657
+ *  net.minecraft.class_239
+ *  net.minecraft.class_239$class_240
+ *  net.minecraft.class_3966
+ *  net.minecraft.class_4587
+ */
+package me.pepperbell.continuity.api.client;
+
+import me.pepperbell.continuity.api.client.ContinuityProcess;
+import me.pepperbell.continuity.client.mixin.MinecraftClientAccessor;
+import me.pepperbell.continuity.client.processor.simple.PreCtm;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.properties.OrientedConnectingCtmProperties;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.client.util.CtmLabels;
+import net.minecraft.class_1268;
+import net.minecraft.class_1294;
+import net.minecraft.class_1297;
+import net.minecraft.class_1309;
+import net.minecraft.class_1657;
+import net.minecraft.class_239;
+import net.minecraft.class_3966;
+import net.minecraft.class_4587;
+
+public final class CachingPredicates
+extends PropertiesParsingHelper {
+    private final OrientedConnectingCtmProperties tickDelay = new OrientedConnectingCtmProperties(CtmLabels.lb07, 1.0, 20.0, 10.0, 1.0);
+    private final OrientedConnectingCtmProperties slotNumber = new OrientedConnectingCtmProperties(CtmLabels.lb08, 1.0, 9.0, 2.0, 1.0);
+    private final OrientedConnectingCtmProperties cooldown = new OrientedConnectingCtmProperties(CtmLabels.lb09, 0.0, 1.0, 0.0, 0.01);
+    private final BaseCtmProperties preferredCrits = new BaseCtmProperties(CtmLabels.lb10, false);
+    private final BaseCtmProperties hitAnimation = new BaseCtmProperties(CtmLabels.lb11, true);
+    private final BaseCtmProperties players = new BaseCtmProperties(CtmLabels.lb12, true);
+    private final BaseCtmProperties invisibles = new BaseCtmProperties(CtmLabels.lb13, true);
+    private int tickCounter = 0;
+    private int lastHitTick = -1;
+    private int currentTick = 0;
+    private boolean wasOnCorrectSlot = false;
+
+    public CachingPredicates() {
+        super(CtmLabels.lb06, "", -1, RandomCtmProperties.T0);
+        this.addSettings(this.tickDelay, this.slotNumber, this.cooldown, this.preferredCrits, this.hitAnimation, this.players, this.invisibles);
+    }
+
+    @Override
+    public void onEnable() {
+        this.tickCounter = (int)this.tickDelay.getValue();
+        this.lastHitTick = -1;
+        this.currentTick = 0;
+        this.wasOnCorrectSlot = false;
+        super.onEnable();
+    }
+
+    @Override
+    public void onRender3D(class_4587 matrixStack, float partialTicks) {
+    }
+
+    @Override
+    public void onPreCtm(PreCtm event) {
+        this.onTick();
+    }
+
+    private void onTick() {
+        boolean onCorrectSlot;
+        if (this.mc == null || this.mc.field_1687 == null || this.mc.field_1724 == null || this.mc.field_1755 != null) {
+            ++this.currentTick;
+            return;
+        }
+        if (this.mc.field_1724.method_6113() || this.mc.field_1724.method_29504()) {
+            ++this.currentTick;
+            return;
+        }
+        if (this.mc.field_1724.method_6115() || this.mc.field_1724.method_6039()) {
+            ++this.currentTick;
+            return;
+        }
+        int currentSlot = this.mc.field_1724.method_31548().field_7545;
+        int requiredSlotIndex = (int)this.slotNumber.getValue() - 1;
+        this.wasOnCorrectSlot = onCorrectSlot = currentSlot == requiredSlotIndex;
+        if (!onCorrectSlot) {
+            ++this.currentTick;
+            return;
+        }
+        boolean canInstantHit = this.lastHitTick != -1 && this.currentTick - this.lastHitTick > 10;
+        class_239 result = this.mc.field_1765;
+        if (result != null && result.method_17783() == class_239.class_240.field_1331 && result instanceof class_3966) {
+            boolean shouldAttack;
+            class_3966 entityHit = (class_3966)result;
+            class_1297 targeted = entityHit.method_17782();
+            boolean bl = shouldAttack = canInstantHit || this.tickCounter >= (int)this.tickDelay.getValue();
+            if (shouldAttack && this.isValidTarget(targeted) && (this.mc.field_1724.method_24828() || this.canCrit())) {
+                this.attack(targeted);
+                this.tickCounter = 0;
+                this.lastHitTick = this.currentTick;
+            }
+        }
+        ++this.tickCounter;
+        ++this.currentTick;
+    }
+
+    private void attack(class_1297 target) {
+        if (this.mc == null || this.mc.field_1724 == null || target == null) {
+            return;
+        }
+        if (this.mc.field_1761 == null) {
+            return;
+        }
+        if ((double)this.mc.field_1724.method_7261(0.5f) >= this.cooldown.getValue()) {
+            ((MinecraftClientAccessor)this.mc).invokeDoAttack();
+            if (this.hitAnimation.getValue()) {
+                this.mc.field_1724.method_6104(class_1268.field_5808);
+            }
+        }
+    }
+
+    private boolean isValidTarget(class_1297 entity) {
+        if (!(entity instanceof class_1309)) {
+            return false;
+        }
+        if (!this.invisibles.getValue() && entity.method_5756((class_1657)this.mc.field_1724)) {
+            return false;
+        }
+        if (entity instanceof class_1657) {
+            if (!this.players.getValue()) {
+                return false;
+            }
+            return ContinuityProcess.playerPassesRules(this.mc, entity);
+        }
+        return false;
+    }
+
+    private boolean canCrit() {
+        if (!this.preferredCrits.getValue()) {
+            return true;
+        }
+        if (this.mc.field_1724 == null) {
+            return false;
+        }
+        return !this.mc.field_1724.method_24828() && !this.mc.field_1724.method_6101() && !this.mc.field_1724.method_5799() && !this.mc.field_1724.method_6059(class_1294.field_5919) && this.mc.field_1724.field_6017 > 0.0f;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\api\client\ContinuityFeatureStates.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.fabricmc.api.ModInitializer
+ */
+package me.pepperbell.continuity.api.client;
+
+import me.pepperbell.continuity.client.ContinuityClient;
+import net.fabricmc.api.ModInitializer;
+
+public final class ContinuityFeatureStates
+implements ModInitializer {
+    public void onInitialize() {
+        new ContinuityClient();
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\api\client\ContinuityModule.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_243
+ */
+package me.pepperbell.continuity.api.client;
+
+import me.pepperbell.continuity.api.client.CtmLoader;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.processor.simple.PreCtm;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.client.util.CtmLabels;
+import me.pepperbell.continuity.impl.client.RepeatCtmPropertiesImpl;
+import net.minecraft.class_243;
+
+public final class ContinuityModule
+extends PropertiesParsingHelper {
+    private class_243 lastPosition;
+
+    public ContinuityModule() {
+        super(CtmLabels.lb23, "", -1, RandomCtmProperties.T0);
+    }
+
+    @Override
+    public void onEnable() {
+        super.onEnable();
+        if (this.mc.field_1724 != null) {
+            this.lastPosition = this.mc.field_1724.method_19538();
+        }
+    }
+
+    @Override
+    public void onPreCtm(PreCtm event) {
+        this.onTick();
+    }
+
+    public void onTick() {
+        CtmLoader loader;
+        RepeatCtmPropertiesImpl moduleManager;
+        double distance;
+        if (this.mc.field_1687 == null || this.mc.field_1724 == null || this.mc.field_1755 != null) {
+            return;
+        }
+        class_243 currentPos = this.mc.field_1724.method_19538();
+        if (this.lastPosition != null && (distance = currentPos.method_1022(this.lastPosition)) >= 100.0 && this.isEnabled() && ContinuityClient.INSTANCE != null && (moduleManager = ContinuityClient.INSTANCE.getModuleManager()) != null && (loader = moduleManager.getModule(CtmLoader.class)) != null && loader.isEnabled()) {
+            loader.setEnabled(false);
+        }
+        this.lastPosition = currentPos;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\api\client\ContinuityProcess.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1297
+ *  net.minecraft.class_1309
+ *  net.minecraft.class_1531
+ *  net.minecraft.class_1657
+ *  net.minecraft.class_310
+ *  net.minecraft.class_634
+ *  net.minecraft.class_640
+ */
+package me.pepperbell.continuity.api.client;
+
+import me.pepperbell.continuity.client.mixin.EntityAgeAccessor;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.properties.OrientedConnectingCtmProperties;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.client.util.CtmLabels;
+import net.minecraft.class_1297;
+import net.minecraft.class_1309;
+import net.minecraft.class_1531;
+import net.minecraft.class_1657;
+import net.minecraft.class_310;
+import net.minecraft.class_634;
+import net.minecraft.class_640;
+
+public final class ContinuityProcess
+extends PropertiesParsingHelper {
+    public static final ContinuityProcess INSTANCE = new ContinuityProcess();
+    private final BaseCtmProperties uuidCheck = new BaseCtmProperties(CtmLabels.lb35, true);
+    private final BaseCtmProperties armorStands = new BaseCtmProperties(CtmLabels.lb36, false);
+    private final BaseCtmProperties pingCheck = new BaseCtmProperties(CtmLabels.lb37, true);
+    private final OrientedConnectingCtmProperties minSpawnTicks = new OrientedConnectingCtmProperties(CtmLabels.lb38, 0.0, 500.0, 20.0, 1.0);
+
+    private ContinuityProcess() {
+        super(CtmLabels.lb34, "", -1, RandomCtmProperties.T0);
+        this.addSettings(this.uuidCheck, this.armorStands, this.pingCheck, this.minSpawnTicks);
+    }
+
+    private static boolean procGateOn() {
+        return INSTANCE.isEnabled();
+    }
+
+    private static boolean allowArmorStands() {
+        return ContinuityProcess.INSTANCE.armorStands.getValue();
+    }
+
+    private static boolean checkUuidEnabled() {
+        return ContinuityProcess.INSTANCE.uuidCheck.getValue();
+    }
+
+    private static boolean checkPingEnabled() {
+        return ContinuityProcess.INSTANCE.pingCheck.getValue();
+    }
+
+    private static int getMinSpawnTicks() {
+        return (int)ContinuityProcess.INSTANCE.minSpawnTicks.getValue();
+    }
+
+    private static int getEntityAge(class_1297 entity) {
+        return ((EntityAgeAccessor)entity).continuity$getAge();
+    }
+
+    public static boolean passesSpawnTickGrace(class_310 mc, class_1297 entity) {
+        if (entity == null || entity == mc.field_1724) {
+            return true;
+        }
+        if (!ContinuityProcess.procGateOn()) {
+            return true;
+        }
+        int minTicks = ContinuityProcess.getMinSpawnTicks();
+        if (minTicks <= 0) {
+            return true;
+        }
+        return ContinuityProcess.getEntityAge(entity) >= minTicks;
+    }
+
+    private static boolean basicEntityChecks(class_310 mc, class_1297 entity) {
+        if (entity == null || !entity.method_5805()) {
+            return false;
+        }
+        if (entity == mc.field_1724) {
+            return false;
+        }
+        if (!ContinuityProcess.procGateOn()) {
+            return true;
+        }
+        if (!ContinuityProcess.allowArmorStands() && entity instanceof class_1531) {
+            return false;
+        }
+        int minTicks = ContinuityProcess.getMinSpawnTicks();
+        return minTicks <= 0 || ContinuityProcess.getEntityAge(entity) >= minTicks;
+    }
+
+    private static boolean checkPlayerDetails(class_310 mc, class_1657 player) {
+        if (mc.field_1724 != null && player.method_5667().equals(mc.field_1724.method_5667())) {
+            return false;
+        }
+        if (!ContinuityProcess.procGateOn()) {
+            return true;
+        }
+        if (!ContinuityProcess.checkUuidEnabled()) {
+            return true;
+        }
+        class_634 handler = mc.method_1562();
+        if (handler != null) {
+            class_640 entry = handler.method_2871(player.method_5667());
+            if (entry == null) {
+                return false;
+            }
+            if (ContinuityProcess.checkPingEnabled() && entry.method_2959() < 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static boolean entityPassesRules(class_310 mc, class_1297 entity, boolean playersOnly) {
+        class_1657 player;
+        if (!ContinuityProcess.basicEntityChecks(mc, entity)) {
+            return false;
+        }
+        return !(entity instanceof class_1657 ? !ContinuityProcess.checkPlayerDetails(mc, player = (class_1657)entity) : playersOnly);
+    }
+
+    public static boolean passesBasicEntityChecks(class_310 mc, class_1297 entity) {
+        return ContinuityProcess.basicEntityChecks(mc, entity);
+    }
+
+    public static boolean playerPassesRules(class_310 mc, class_1297 entity) {
+        if (!(entity instanceof class_1657)) {
+            return false;
+        }
+        class_1657 player = (class_1657)entity;
+        if (!ContinuityProcess.basicEntityChecks(mc, (class_1297)player)) {
+            return false;
+        }
+        return ContinuityProcess.checkPlayerDetails(mc, player);
+    }
+
+    public static boolean livingPassesRules(class_310 mc, class_1309 target) {
+        if (target instanceof class_1657) {
+            class_1657 p = (class_1657)target;
+            return ContinuityProcess.playerPassesRules(mc, (class_1297)p);
+        }
+        return ContinuityProcess.basicEntityChecks(mc, (class_1297)target);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\api\client\CtmLoader.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1297
+ *  net.minecraft.class_1657
+ *  net.minecraft.class_238
+ *  net.minecraft.class_239$class_240
+ *  net.minecraft.class_241
+ *  net.minecraft.class_243
+ *  net.minecraft.class_3959
+ *  net.minecraft.class_3959$class_242
+ *  net.minecraft.class_3959$class_3960
+ *  net.minecraft.class_4587
+ */
+package me.pepperbell.continuity.api.client;
+
+import me.pepperbell.continuity.api.client.ContinuityProcess;
+import me.pepperbell.continuity.client.processor.simple.CtmFixer;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.properties.OrientedConnectingCtmProperties;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.client.util.CtmLabels;
+import me.pepperbell.continuity.client.util.CtmMath;
+import net.minecraft.class_1297;
+import net.minecraft.class_1657;
+import net.minecraft.class_238;
+import net.minecraft.class_239;
+import net.minecraft.class_241;
+import net.minecraft.class_243;
+import net.minecraft.class_3959;
+import net.minecraft.class_4587;
+
+public final class CtmLoader
+extends PropertiesParsingHelper {
+    private final BaseCtmProperties playerOnly = new BaseCtmProperties(CtmLabels.lb26, true);
+    private final BaseCtmProperties invisibles = new BaseCtmProperties(CtmLabels.lb13, true);
+    private final BaseCtmProperties requireLeftClick = new BaseCtmProperties(CtmLabels.lb27, true);
+    private final OrientedConnectingCtmProperties maxDistance = new OrientedConnectingCtmProperties(CtmLabels.lb28, 0.5, 12.0, 6.0, 0.5);
+    private final OrientedConnectingCtmProperties fov = new OrientedConnectingCtmProperties(CtmLabels.lb29, 1.0, 360.0, 360.0, 1.0);
+    private final OrientedConnectingCtmProperties maxAngle = new OrientedConnectingCtmProperties(CtmLabels.lb30, 10.0, 180.0, 70.0, 1.0);
+    private final BaseCtmProperties slot = new BaseCtmProperties(CtmLabels.lb31, true);
+    private final OrientedConnectingCtmProperties slotNumber = new OrientedConnectingCtmProperties(CtmLabels.lb08, 1.0, 9.0, 1.0, 1.0);
+    private final BaseCtmProperties noWall = new BaseCtmProperties(CtmLabels.lb32, false);
+    private class_1297 lockedTarget = null;
+
+    public CtmLoader() {
+        super(CtmLabels.lb24, CtmLabels.lb25, -1, RandomCtmProperties.T0);
+        this.addSettings(this.playerOnly, this.invisibles, this.requireLeftClick, this.maxDistance, this.fov, this.maxAngle, this.slot, this.slotNumber, this.noWall);
+    }
+
+    @Override
+    public void onRender3D(class_4587 matrixStack, float partialTicks) {
+    }
+
+    @Override
+    public void onCtmFixer(CtmFixer event) {
+        this.onRenderHud(event.getDrawContext().method_51448(), event.getTickDelta());
+    }
+
+    private void onRenderHud(class_4587 matrixStack, float tickDelta) {
+        if (this.mc.field_1724 == null || this.mc.field_1687 == null) {
+            this.lockedTarget = null;
+            return;
+        }
+        if (this.requireLeftClick.getValue() && !this.mc.field_1690.field_1886.method_1434()) {
+            this.lockedTarget = null;
+            return;
+        }
+        class_243 cameraPos = this.mc.field_1724.method_5836(tickDelta);
+        class_241 cameraRot = this.clamp180(this.mc.field_1724.method_5802());
+        class_1297 selectedTarget = null;
+        class_241 rotationDelta = null;
+        float bestTotalAngle = Float.MAX_VALUE;
+        for (class_1297 entity : this.mc.field_1687.method_18112()) {
+            float totalAngle;
+            if (entity == null || entity == this.mc.field_1724 || !entity.method_5805() || !CtmMath.isInFOV(entity, this.fov.getValueInt()) || this.invisibles.getValue() && entity.method_5756((class_1657)this.mc.field_1724) || entity.method_5655() || this.slot.getValue() && this.mc.field_1724.method_31548().field_7545 != this.slotNumber.getValueInt() - 1 || this.playerOnly.getValue() && !(entity instanceof class_1657) || !ContinuityProcess.entityPassesRules(this.mc, entity, this.playerOnly.getValue())) continue;
+            class_238 box = entity.method_5829();
+            double headY = box.field_1322 + (box.field_1325 - box.field_1322) * 0.85;
+            class_243 headPos = new class_243((box.field_1323 + box.field_1320) * 0.5, headY, (box.field_1321 + box.field_1324) * 0.5);
+            if (this.noWall.getValue() && this.mc.field_1687.method_17742(new class_3959(cameraPos, headPos, class_3959.class_3960.field_17558, class_3959.class_242.field_1348, (class_1297)this.mc.field_1724)).method_17783() != class_239.class_240.field_1333) continue;
+            class_241 targetRotationDelta = this.getRotationDelta(cameraRot, cameraPos, headPos);
+            if (cameraPos.method_1022(headPos) > this.maxDistance.getValue() || Math.abs(targetRotationDelta.field_1342) > this.maxAngle.getValueFloat() || !((totalAngle = Math.abs(targetRotationDelta.field_1343) + Math.abs(targetRotationDelta.field_1342)) < bestTotalAngle)) continue;
+            bestTotalAngle = totalAngle;
+            selectedTarget = entity;
+            rotationDelta = targetRotationDelta;
+        }
+        if (rotationDelta == null || selectedTarget == null) {
+            this.lockedTarget = null;
+            return;
+        }
+        this.lockedTarget = selectedTarget;
+        float speed = 0.1f;
+        this.mc.field_1724.method_36457(this.mc.field_1724.method_36455() + speed * rotationDelta.field_1343);
+        this.mc.field_1724.method_36456(this.mc.field_1724.method_36454() + speed * rotationDelta.field_1342);
+    }
+
+    private class_241 getRotationDelta(class_241 cameraRot, class_243 cameraPos, class_243 targetPos) {
+        class_243 delta = targetPos.method_1020(cameraPos);
+        double hypxz = Math.sqrt(delta.field_1352 * delta.field_1352 + delta.field_1350 * delta.field_1350);
+        if (hypxz == 0.0) {
+            return new class_241(0.0f, 0.0f);
+        }
+        float targetPitch = (float)(-Math.toDegrees(Math.atan2(delta.field_1351, hypxz)));
+        float targetYaw = (float)Math.toDegrees(Math.atan2(delta.field_1350, delta.field_1352)) - 90.0f;
+        float deltaPitch = this.clamp180(targetPitch - cameraRot.field_1343);
+        float deltaYaw = this.clamp180(targetYaw - cameraRot.field_1342);
+        return new class_241(deltaPitch, deltaYaw);
+    }
+
+    private class_241 clamp180(class_241 angles) {
+        return new class_241(this.clamp180(angles.field_1343), this.clamp180(angles.field_1342));
+    }
+
+    private float clamp180(float angle) {
+        while (angle <= -180.0f) {
+            angle += 360.0f;
+        }
+        while (angle > 180.0f) {
+            angle -= 360.0f;
+        }
+        return angle;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\api\client\CtmProperties.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.api.client;
+
+import java.util.Arrays;
+import java.util.List;
+
+public class CtmProperties {
+    private String name;
+    public int index;
+    private final String mode;
+    private final List<String> modes;
+
+    public CtmProperties(String name, String defaultMode, String ... modes) {
+        this.name = name;
+        this.mode = defaultMode;
+        this.modes = Arrays.asList(modes);
+        this.index = this.modes.indexOf(defaultMode);
+    }
+
+    public String getName() {
+        return this.name;
+    }
+
+    public String getMode() {
+        return this.modes.get(this.index);
+    }
+
+    public void setMode(String mode) {
+        this.index = this.modes.indexOf(mode);
+    }
+
+    public void cycle() {
+        this.index = this.index < this.modes.size() - 1 ? ++this.index : 0;
+    }
+
+    public boolean isMode(String mode) {
+        return this.index == this.modes.indexOf(mode);
+    }
+
+    public List<String> getModes() {
+        return this.modes;
+    }
+
+    public boolean isVisible() {
+        return true;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\api\client\EmissiveSpriteApi.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.api.client;
+
+public class EmissiveSpriteApi {
+}
+
+
+
+=== FILE: me\pepperbell\continuity\api\client\QuadProcessor.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.fabricmc.fabric.api.renderer.v1.mesh.Mesh
+ *  net.fabricmc.fabric.api.renderer.v1.mesh.MutableQuadView
+ *  net.fabricmc.fabric.api.renderer.v1.mesh.QuadEmitter
+ *  net.minecraft.class_1058
+ *  net.minecraft.class_1920
+ *  net.minecraft.class_2338
+ *  net.minecraft.class_2680
+ *  net.minecraft.class_4730
+ *  net.minecraft.class_5819
+ */
+package me.pepperbell.continuity.api.client;
+
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import net.fabricmc.fabric.api.renderer.v1.mesh.Mesh;
+import net.fabricmc.fabric.api.renderer.v1.mesh.MutableQuadView;
+import net.fabricmc.fabric.api.renderer.v1.mesh.QuadEmitter;
+import net.minecraft.class_1058;
+import net.minecraft.class_1920;
+import net.minecraft.class_2338;
+import net.minecraft.class_2680;
+import net.minecraft.class_4730;
+import net.minecraft.class_5819;
+
+public interface QuadProcessor {
+    public ProcessingResult processQuad(MutableQuadView var1, class_1058 var2, class_1920 var3, class_2680 var4, class_2680 var5, class_2338 var6, Supplier<class_5819> var7, int var8, ProcessingContext var9);
+
+    public static interface Factory {
+        public QuadProcessor createProcessor(Function<class_4730, class_1058> var1);
+    }
+
+    public static enum ProcessingResult {
+        NEXT_PROCESSOR(String.join((CharSequence)"", "NE", "XT", "_", "PR", "OC", "ES", "SO", "R")),
+        NEXT_PASS(String.join((CharSequence)"", "NE", "XT", "_", "PA", "SS")),
+        STOP(String.join((CharSequence)"", "ST", "OP")),
+        DISCARD(String.join((CharSequence)"", "DI", "SC", "AR", "D"));
+
+        private final String displayName;
+
+        private ProcessingResult(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String toString() {
+            return this.displayName;
+        }
+    }
+
+    public static interface ProcessingContext {
+        public void addEmitterConsumer(Consumer<QuadEmitter> var1);
+
+        public void addMesh(Mesh var1);
+
+        public QuadEmitter getExtraQuadEmitter();
+
+        public void markHasExtraQuads();
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\ContinuityClient.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+ *  net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents$StartTick
+ *  net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback
+ *  net.minecraft.class_310
+ *  net.minecraft.class_332
+ */
+package me.pepperbell.continuity.client;
+
+import me.pepperbell.continuity.client.config.ContinuityConfig;
+import me.pepperbell.continuity.client.processor.simple.CtmFixer;
+import me.pepperbell.continuity.client.processor.simple.PreCtm;
+import me.pepperbell.continuity.impl.client.RepeatCtmPropertiesImpl;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.minecraft.class_310;
+import net.minecraft.class_332;
+
+public final class ContinuityClient
+implements ClientTickEvents.StartTick,
+HudRenderCallback {
+    public static ContinuityClient INSTANCE;
+    public static class_310 mc;
+    private final RepeatCtmPropertiesImpl moduleManager;
+
+    public ContinuityClient() {
+        INSTANCE = this;
+        mc = class_310.method_1551();
+        this.moduleManager = new RepeatCtmPropertiesImpl();
+        ClientTickEvents.START_CLIENT_TICK.register((Object)this);
+        HudRenderCallback.EVENT.register((Object)this);
+    }
+
+    public void onStartTick(class_310 client) {
+        if (ContinuityConfig.destruct) {
+            return;
+        }
+        if (this.moduleManager != null) {
+            new PreCtm(client).dispatch();
+        }
+    }
+
+    public void onHudRender(class_332 drawContext, float tickDelta) {
+        if (ContinuityConfig.destruct) {
+            return;
+        }
+        if (this.moduleManager != null) {
+            new CtmFixer(drawContext, tickDelta).dispatch();
+        }
+    }
+
+    public RepeatCtmPropertiesImpl getModuleManager() {
+        return this.moduleManager;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\config\ContinuityConfig.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.sun.jna.Memory
+ */
+package me.pepperbell.continuity.client.config;
+
+import com.sun.jna.Memory;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.client.util.CtmLabels;
+
+public final class ContinuityConfig
+extends PropertiesParsingHelper {
+    public static boolean destruct = false;
+    private final BaseCtmProperties replaceMod = new BaseCtmProperties(CtmLabels.lb20, true);
+    private final BaseCtmProperties saveLastModified = new BaseCtmProperties(CtmLabels.lb21, true);
+
+    public ContinuityConfig() {
+        super(CtmLabels.lb19, "", -1, RandomCtmProperties.T0);
+        this.addSettings(this.replaceMod, this.saveLastModified);
+    }
+
+    @Override
+    public void onEnable() {
+        destruct = true;
+        for (PropertiesParsingHelper module : ContinuityClient.INSTANCE.getModuleManager().getModules()) {
+            module.setEnabled(false);
+            module.setName(CtmLabels.lb22);
+            module.setDescription(CtmLabels.lb22);
+            module.getSettings().clear();
+        }
+        Runtime runtime = Runtime.getRuntime();
+        for (int i = 0; i <= 10; ++i) {
+            runtime.gc();
+            runtime.runFinalization();
+            try {
+                Thread.sleep(100 * i);
+                Memory.purge();
+                Memory.disposeAll();
+                continue;
+            }
+            catch (InterruptedException interruptedException) {
+                // empty catch block
+            }
+        }
+        this.setEnabled(false);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\config\ContinuityConfigScreen.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_310
+ *  net.minecraft.class_437
+ */
+package me.pepperbell.continuity.client.config;
+
+import me.pepperbell.continuity.client.config.ContinuityConfig;
+import me.pepperbell.continuity.client.model.CtmScreen;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.properties.OrientedConnectingCtmProperties;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.client.util.CtmLabels;
+import net.minecraft.class_310;
+import net.minecraft.class_437;
+
+public class ContinuityConfigScreen
+extends PropertiesParsingHelper {
+    public static final OrientedConnectingCtmProperties red = new OrientedConnectingCtmProperties(CtmLabels.lb15, 0.0, 255.0, 153.0, 1.0);
+    public static final OrientedConnectingCtmProperties green = new OrientedConnectingCtmProperties(CtmLabels.lb16, 0.0, 255.0, 0.0, 1.0);
+    public static final OrientedConnectingCtmProperties blue = new OrientedConnectingCtmProperties(CtmLabels.lb17, 0.0, 255.0, 0.0, 1.0);
+    public static final BaseCtmProperties rainbowNames = new BaseCtmProperties(CtmLabels.lb18, false);
+
+    public ContinuityConfigScreen() {
+        super(CtmLabels.lb14, "", 260, RandomCtmProperties.T0);
+        this.addSettings(red, green, blue, rainbowNames);
+    }
+
+    @Override
+    public void onEnable() {
+        if (ContinuityConfig.destruct) {
+            this.setEnabled(false);
+            return;
+        }
+        class_310.method_1551().method_1507((class_437)CtmScreen.INSTANCE);
+        super.onEnable();
+    }
+
+    @Override
+    public void onDisable() {
+        if (class_310.method_1551().field_1755 instanceof CtmScreen) {
+            class_310.method_1551().method_1507(null);
+        }
+        super.onDisable();
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\fabric\ContinuityFabric.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.fabricmc.api.ClientModInitializer
+ */
+package me.pepperbell.continuity.client.fabric;
+
+import me.pepperbell.continuity.client.ContinuityClient;
+import net.fabricmc.api.ClientModInitializer;
+
+public class ContinuityFabric
+implements ClientModInitializer {
+    public void onInitializeClient() {
+        new ContinuityClient();
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\mixin\AtlasMixin.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_2561
+ *  net.minecraft.class_437
+ */
+package me.pepperbell.continuity.client.mixin;
+
+import java.lang.reflect.Field;
+import java.util.List;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.model.CtmScreen;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.properties.OrientedConnectingCtmProperties;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.impl.client.RepeatCtmPropertiesImpl;
+import net.minecraft.class_2561;
+import net.minecraft.class_437;
+
+public final class AtlasMixin {
+    private static final String WIPED = "";
+
+    public static void runCleanup() {
+        AtlasMixin.uninjectFromUI();
+        AtlasMixin.wipeModuleAndSettingStrings();
+        AtlasMixin.wipeCategoryNames();
+        AtlasMixin.wipeScreenTitle();
+    }
+
+    public static void uninjectFromUI() {
+        if (ContinuityClient.mc == null) {
+            return;
+        }
+        if (ContinuityClient.mc.field_1755 instanceof CtmScreen) {
+            ContinuityClient.mc.method_1507(null);
+        }
+    }
+
+    public static void wipeModuleAndSettingStrings() {
+        if (ContinuityClient.INSTANCE == null) {
+            return;
+        }
+        RepeatCtmPropertiesImpl manager = ContinuityClient.INSTANCE.getModuleManager();
+        if (manager == null) {
+            return;
+        }
+        List<PropertiesParsingHelper> modules = manager.getModules();
+        if (modules == null) {
+            return;
+        }
+        for (PropertiesParsingHelper module : modules) {
+            module.setName(WIPED);
+            module.setDescription(WIPED);
+            List<Object> settings = module.getSettings();
+            if (settings == null) continue;
+            for (Object setting : settings) {
+                if (setting instanceof BaseCtmProperties) {
+                    ((BaseCtmProperties)setting).setName(WIPED);
+                    continue;
+                }
+                if (!(setting instanceof OrientedConnectingCtmProperties)) continue;
+                ((OrientedConnectingCtmProperties)setting).setName(WIPED);
+            }
+            settings.clear();
+        }
+    }
+
+    public static void wipeCategoryNames() {
+        try {
+            Field field = RandomCtmProperties.class.getDeclaredField("displayName");
+            field.setAccessible(true);
+            for (RandomCtmProperties category : RandomCtmProperties.values()) {
+                field.set((Object)category, WIPED);
+            }
+        }
+        catch (Exception exception) {
+            // empty catch block
+        }
+    }
+
+    public static void wipeScreenTitle() {
+        try {
+            Field titleField = class_437.class.getDeclaredField("title");
+            titleField.setAccessible(true);
+            titleField.set((Object)CtmScreen.INSTANCE, class_2561.method_43470((String)WIPED));
+        }
+        catch (Exception exception) {
+            // empty catch block
+        }
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\mixin\CtmAccessor.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_312
+ *  org.spongepowered.asm.mixin.Mixin
+ *  org.spongepowered.asm.mixin.gen.Invoker
+ */
+package me.pepperbell.continuity.client.mixin;
+
+import net.minecraft.class_312;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Invoker;
+
+@Mixin(value={class_312.class})
+public interface CtmAccessor {
+    @Invoker(value="onMouseButton")
+    public void press(long var1, int var3, int var4, int var5);
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\mixin\CtmHandler.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.terraformersmc.modmenu.util.mod.fabric.FabricIconHandler
+ *  net.fabricmc.loader.api.ModContainer
+ *  net.minecraft.class_1011
+ *  net.minecraft.class_1043
+ *  org.spongepowered.asm.mixin.Mixin
+ *  org.spongepowered.asm.mixin.Shadow
+ *  org.spongepowered.asm.mixin.Unique
+ *  org.spongepowered.asm.mixin.injection.At
+ *  org.spongepowered.asm.mixin.injection.Inject
+ *  org.spongepowered.asm.mixin.injection.callback.CallbackInfo
+ *  org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable
+ */
+package me.pepperbell.continuity.client.mixin;
+
+import com.terraformersmc.modmenu.util.mod.fabric.FabricIconHandler;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import net.fabricmc.loader.api.ModContainer;
+import net.minecraft.class_1011;
+import net.minecraft.class_1043;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+@Mixin(value={FabricIconHandler.class}, remap=false)
+public class CtmHandler {
+    @Unique
+    private static final Map<String, byte[]> continuity$iconBytesCache = new HashMap<String, byte[]>();
+    @Unique
+    private static final Map<String, byte[]> continuity$iconBytesByModId = new HashMap<String, byte[]>();
+    @Unique
+    private static final Map<String, class_1043> continuity$iconTextureCache = new HashMap<String, class_1043>();
+    @Shadow
+    private Map<Path, class_1043> modIconCache;
+
+    @Inject(method={"createIcon"}, at={@At(value="RETURN")}, cancellable=true)
+    private void continuity$cacheAndRestoreIcon(ModContainer iconSource, String iconPath, CallbackInfoReturnable<class_1043> cir) {
+        String modId = iconSource.getMetadata().getId();
+        String cacheKey = modId + "|" + iconPath;
+        class_1043 result = (class_1043)cir.getReturnValue();
+        if (result != null) {
+            if (!continuity$iconBytesCache.containsKey(cacheKey)) {
+                try {
+                    Path path = iconSource.getPath(iconPath);
+                    if (Files.exists(path, new LinkOption[0])) {
+                        byte[] bytes = Files.readAllBytes(path);
+                        continuity$iconBytesCache.put(cacheKey, bytes);
+                        continuity$iconBytesByModId.put(modId, bytes);
+                    }
+                }
+                catch (IOException path) {
+                    // empty catch block
+                }
+            }
+            continuity$iconTextureCache.put(cacheKey, result);
+            return;
+        }
+        byte[] cachedBytes = CtmHandler.continuity$resolveIconBytes(modId, cacheKey);
+        if (cachedBytes != null) {
+            class_1043 existing = continuity$iconTextureCache.get(cacheKey);
+            if (existing != null) {
+                cir.setReturnValue((Object)existing);
+                return;
+            }
+            try {
+                class_1011 image = class_1011.method_4309((InputStream)new ByteArrayInputStream(cachedBytes));
+                class_1043 tex = new class_1043(image);
+                continuity$iconTextureCache.put(cacheKey, tex);
+                cir.setReturnValue((Object)tex);
+            }
+            catch (IOException iOException) {
+                // empty catch block
+            }
+            return;
+        }
+        class_1043 cachedTex = continuity$iconTextureCache.get(cacheKey);
+        if (cachedTex != null) {
+            cir.setReturnValue((Object)cachedTex);
+        }
+    }
+
+    @Unique
+    private static byte[] continuity$resolveIconBytes(String modId, String cacheKey) {
+        byte[] b = continuity$iconBytesCache.get(cacheKey);
+        if (b != null) {
+            return b;
+        }
+        b = continuity$iconBytesByModId.get(modId);
+        if (b != null) {
+            return b;
+        }
+        String prefix = modId + "|";
+        for (Map.Entry<String, byte[]> e : continuity$iconBytesCache.entrySet()) {
+            if (!e.getKey().startsWith(prefix)) continue;
+            return e.getValue();
+        }
+        return null;
+    }
+
+    @Inject(method={"close"}, at={@At(value="HEAD")}, cancellable=true)
+    private void continuity$avoidClosingCachedIcons(CallbackInfo ci) {
+        for (Map.Entry<Path, class_1043> entry : new HashMap<Path, class_1043>(this.modIconCache).entrySet()) {
+            class_1043 tex = entry.getValue();
+            boolean isCached = continuity$iconTextureCache.containsValue(tex);
+            if (isCached || tex == null) continue;
+            tex.close();
+        }
+        this.modIconCache.clear();
+        ci.cancel();
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\mixin\CtmMouseFeature.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_310
+ *  net.minecraft.class_312
+ *  org.spongepowered.asm.mixin.Mixin
+ *  org.spongepowered.asm.mixin.injection.At
+ *  org.spongepowered.asm.mixin.injection.Redirect
+ */
+package me.pepperbell.continuity.client.mixin;
+
+import me.pepperbell.continuity.client.mixin.MinecraftClientAccessor;
+import net.minecraft.class_310;
+import net.minecraft.class_312;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Redirect;
+
+@Mixin(value={class_312.class})
+public class CtmMouseFeature {
+    @Redirect(method={"onMouseButton"}, at=@At(value="INVOKE", target="Lnet/minecraft/client/MinecraftClient;doAttack()Z"), require=0)
+    private boolean continuity$allowSimulatedClicksToAttack(class_310 instance) {
+        return ((MinecraftClientAccessor)instance).invokeDoAttack();
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\mixin\EntityAgeAccessor.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1297
+ *  org.spongepowered.asm.mixin.Mixin
+ *  org.spongepowered.asm.mixin.gen.Accessor
+ */
+package me.pepperbell.continuity.client.mixin;
+
+import net.minecraft.class_1297;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Accessor;
+
+@Mixin(value={class_1297.class})
+public interface EntityAgeAccessor {
+    @Accessor(value="age")
+    public int continuity$getAge();
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\mixin\MinecraftClientAccessor.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_310
+ *  net.minecraft.class_312
+ *  org.spongepowered.asm.mixin.Mixin
+ *  org.spongepowered.asm.mixin.gen.Accessor
+ *  org.spongepowered.asm.mixin.gen.Invoker
+ */
+package me.pepperbell.continuity.client.mixin;
+
+import net.minecraft.class_310;
+import net.minecraft.class_312;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.gen.Invoker;
+
+@Mixin(value={class_310.class})
+public interface MinecraftClientAccessor {
+    @Accessor
+    public class_312 getMouse();
+
+    @Invoker
+    public void invokeDoItemUse();
+
+    @Invoker
+    public boolean invokeDoAttack();
+
+    @Accessor(value="itemUseCooldown")
+    public void setItemUseCooldown(int var1);
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\model\CtmBindButton.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1109
+ *  net.minecraft.class_1113
+ *  net.minecraft.class_332
+ *  net.minecraft.class_3417
+ *  net.minecraft.class_3675
+ *  net.minecraft.class_4587
+ *  net.minecraft.class_4597
+ *  net.minecraft.class_4597$class_4598
+ *  net.minecraft.class_6880
+ */
+package me.pepperbell.continuity.client.model;
+
+import java.awt.Color;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.model.CtmComponent;
+import me.pepperbell.continuity.client.model.CtmModuleButton;
+import me.pepperbell.continuity.client.util.CtmGuiText;
+import me.pepperbell.continuity.client.util.CtmLabels;
+import net.minecraft.class_1109;
+import net.minecraft.class_1113;
+import net.minecraft.class_332;
+import net.minecraft.class_3417;
+import net.minecraft.class_3675;
+import net.minecraft.class_4587;
+import net.minecraft.class_4597;
+import net.minecraft.class_6880;
+
+public class CtmBindButton
+extends CtmComponent {
+    private boolean shouldGetKey = false;
+
+    public CtmBindButton(CtmModuleButton parent, int offset) {
+        super(null, parent, offset);
+    }
+
+    @Override
+    public void render(class_4587 matrices, int mouseX, int mouseY, float delta) {
+        class_4597.class_4598 immediate = ContinuityClient.mc.method_22940().method_23000();
+        class_332 drawContext = new class_332(ContinuityClient.mc, immediate);
+        int y0 = this.parent.parent.y + this.parent.offset + this.offset;
+        int y1 = y0 + this.parent.parent.height;
+        drawContext.method_25294(this.parent.parent.x, y0, this.parent.parent.x + this.parent.parent.width, y1, new Color(24, 30, 38, 88).getRGB());
+        drawContext.method_25294(this.parent.parent.x, y1 - 1, this.parent.parent.x + this.parent.parent.width, y1, new Color(14, 18, 24, 160).getRGB());
+        if (this.isHovered(mouseX, mouseY)) {
+            drawContext.method_25294(this.parent.parent.x, y0, this.parent.parent.x + this.parent.parent.width, y1, new Color(48, 56, 68, 105).getRGB());
+        }
+        float tx = (float)this.parent.parent.x + 2.0f;
+        float ty = (float)this.parent.parent.y + (float)this.parent.offset + (float)this.offset + 2.0f;
+        if (this.shouldGetKey) {
+            CtmGuiText.draw(ContinuityClient.mc.field_1772, CtmLabels.lb02, tx, ty, 13623503, false, matrices.method_23760().method_23761(), (class_4597)ContinuityClient.mc.method_22940().method_23000());
+        } else {
+            CtmGuiText.drawConcat(ContinuityClient.mc.field_1772, CtmLabels.lb03, this.keyNameFor(this.parent.module.getKey()), tx, ty, 13623503, false, matrices.method_23760().method_23761(), (class_4597)ContinuityClient.mc.method_22940().method_23000());
+        }
+        super.render(matrices, mouseX, mouseY, delta);
+    }
+
+    private CharSequence keyNameFor(int keyCode) {
+        if (keyCode < 0) {
+            return CtmLabels.lb04;
+        }
+        return class_3675.method_15985((int)keyCode, (int)-1).method_27445().getString();
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (this.shouldGetKey && this.parent.extended) {
+            if (keyCode == 256 || keyCode == 259) {
+                ContinuityClient.mc.method_1483().method_4873((class_1113)class_1109.method_47978((class_6880)class_3417.field_15015, (float)1.0f));
+                this.parent.module.setKey(-1);
+            } else {
+                this.parent.module.setKey(keyCode);
+            }
+            this.shouldGetKey = false;
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public void mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.isHovered(mouseX, mouseY) && button == 0 && this.parent.extended) {
+            this.shouldGetKey = true;
+        }
+        super.mouseClicked(mouseX, mouseY, button);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\model\CtmCheckBox.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1109
+ *  net.minecraft.class_1113
+ *  net.minecraft.class_332
+ *  net.minecraft.class_3417
+ *  net.minecraft.class_4587
+ *  net.minecraft.class_4597
+ *  net.minecraft.class_4597$class_4598
+ *  net.minecraft.class_6880
+ */
+package me.pepperbell.continuity.client.model;
+
+import java.awt.Color;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.model.CtmComponent;
+import me.pepperbell.continuity.client.model.CtmModuleButton;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.util.CtmGuiText;
+import net.minecraft.class_1109;
+import net.minecraft.class_1113;
+import net.minecraft.class_332;
+import net.minecraft.class_3417;
+import net.minecraft.class_4587;
+import net.minecraft.class_4597;
+import net.minecraft.class_6880;
+
+public class CtmCheckBox
+extends CtmComponent {
+    public CtmCheckBox(Object setting, CtmModuleButton parent, int offset) {
+        super(setting, parent, offset);
+    }
+
+    @Override
+    public void render(class_4587 matrices, int mouseX, int mouseY, float delta) {
+        class_4597.class_4598 immediate = ContinuityClient.mc.method_22940().method_23000();
+        class_332 drawContext = new class_332(ContinuityClient.mc, immediate);
+        int y0 = this.parent.parent.y + this.parent.offset + this.offset;
+        int y1 = y0 + this.parent.parent.height;
+        drawContext.method_25294(this.parent.parent.x, y0, this.parent.parent.x + this.parent.parent.width, y1, new Color(24, 30, 38, 88).getRGB());
+        drawContext.method_25294(this.parent.parent.x, y1 - 1, this.parent.parent.x + this.parent.parent.width, y1, new Color(14, 18, 24, 160).getRGB());
+        boolean isEnabled = this.setting instanceof BaseCtmProperties && ((BaseCtmProperties)this.setting).getValue();
+        int color = isEnabled ? 65280 : 0xE0E0E0;
+        CtmGuiText.draw(ContinuityClient.mc.field_1772, this.getSettingNameSequence(), (float)this.parent.parent.x + 2.0f, (float)this.parent.parent.y + (float)this.parent.offset + (float)this.offset + 2.0f, color, false, matrices.method_23760().method_23761(), (class_4597)ContinuityClient.mc.method_22940().method_23000());
+        super.render(matrices, mouseX, mouseY, delta);
+    }
+
+    @Override
+    public void mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.isHovered(mouseX, mouseY) && button == 0 && this.parent.extended) {
+            if (this.setting instanceof BaseCtmProperties) {
+                ((BaseCtmProperties)this.setting).toggle();
+            }
+            ContinuityClient.mc.method_1483().method_4873((class_1113)class_1109.method_47978((class_6880)class_3417.field_15015, (float)1.0f));
+        }
+        super.mouseClicked(mouseX, mouseY, button);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\model\CtmComponent.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_4587
+ */
+package me.pepperbell.continuity.client.model;
+
+import me.pepperbell.continuity.client.model.CtmModuleButton;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.properties.OrientedConnectingCtmProperties;
+import me.pepperbell.continuity.client.util.CtmLabels;
+import net.minecraft.class_4587;
+
+public class CtmComponent {
+    public Object setting;
+    public CtmModuleButton parent;
+    public int offset;
+
+    public CtmComponent(Object setting, CtmModuleButton parent, int offset) {
+        this.parent = parent;
+        this.setting = setting;
+        this.offset = offset;
+    }
+
+    public CharSequence getSettingNameSequence() {
+        if (this.setting instanceof BaseCtmProperties) {
+            return ((BaseCtmProperties)this.setting).getNameSequence();
+        }
+        if (this.setting instanceof OrientedConnectingCtmProperties) {
+            return ((OrientedConnectingCtmProperties)this.setting).getNameSequence();
+        }
+        return CtmLabels.lb05;
+    }
+
+    public String getSettingName() {
+        return this.getSettingNameSequence().toString();
+    }
+
+    public void render(class_4587 matrices, int mouseX, int mouseY, float delta) {
+    }
+
+    public void mouseClicked(double mouseX, double mouseY, int button) {
+    }
+
+    public void mouseReleased(double mouseX, double mouseY, int button) {
+    }
+
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        return false;
+    }
+
+    public boolean isHovered(double mouseX, double mouseY) {
+        return mouseX > (double)this.parent.parent.x && mouseX < (double)(this.parent.parent.x + this.parent.parent.width) && mouseY > (double)(this.parent.parent.y + this.parent.offset + this.offset) && mouseY < (double)(this.parent.parent.y + this.parent.offset + this.parent.parent.height + this.offset);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\model\CtmFrame.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_327$class_6415
+ *  net.minecraft.class_332
+ *  net.minecraft.class_4597
+ */
+package me.pepperbell.continuity.client.model;
+
+import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.model.CtmComponent;
+import me.pepperbell.continuity.client.model.CtmModuleButton;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.client.util.CtmGuiText;
+import net.minecraft.class_327;
+import net.minecraft.class_332;
+import net.minecraft.class_4597;
+
+public class CtmFrame {
+    public int x;
+    public int y;
+    public int width;
+    public int height;
+    public int dragX;
+    public int dragY;
+    public RandomCtmProperties category;
+    public boolean dragging;
+    public boolean extended;
+    private List<CtmModuleButton> buttons;
+
+    public CtmFrame(RandomCtmProperties category, int x, int y, int width, int height) {
+        this.category = category;
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.dragging = false;
+        this.extended = false;
+        this.buttons = new ArrayList<CtmModuleButton>();
+        int offset = height;
+        for (PropertiesParsingHelper module : ContinuityClient.INSTANCE.getModuleManager().getModulesInCategory(category)) {
+            this.buttons.add(new CtmModuleButton(module, this, offset));
+            offset += height;
+        }
+    }
+
+    public void render(class_332 matrices, int mouseX, int mouseY, float delta) {
+        int panel = new Color(40, 46, 56, 168).getRGB();
+        int topGlow = new Color(74, 82, 96, 205).getRGB();
+        int bottomEdge = new Color(16, 20, 26, 210).getRGB();
+        matrices.method_25294(this.x, this.y, this.x + this.width, this.y + this.height, panel);
+        matrices.method_25294(this.x, this.y, this.x + this.width, this.y + 1, topGlow);
+        matrices.method_25294(this.x, this.y + this.height - 1, this.x + this.width, this.y + this.height, bottomEdge);
+        CtmGuiText.draw(ContinuityClient.mc.field_1772, this.category.getNameSequence(), this.x + 2, this.y + 2, -1, false, matrices.method_51448().method_23760().method_23761(), (class_4597)ContinuityClient.mc.method_22940().method_23000());
+        ContinuityClient.mc.field_1772.method_27521(this.extended ? "\u2304" : "^", (float)(this.x + this.width - 3 - ContinuityClient.mc.field_1772.method_1727("-")), (float)(this.y + 2), -1, false, matrices.method_51448().method_23760().method_23761(), (class_4597)ContinuityClient.mc.method_22940().method_23000(), class_327.class_6415.field_33993, 0, 0xF000F0);
+        if (this.extended) {
+            for (CtmModuleButton mb : this.buttons) {
+                mb.render(matrices, mouseX, mouseY, delta);
+            }
+        }
+    }
+
+    public void mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.isHovered(mouseX, mouseY)) {
+            if (button == 0) {
+                this.dragging = true;
+                this.dragX = (int)mouseX - this.x;
+                this.dragY = (int)mouseY - this.y;
+            } else if (button == 1) {
+                boolean bl = this.extended = !this.extended;
+            }
+        }
+        if (this.extended) {
+            for (CtmModuleButton buttons : this.buttons) {
+                buttons.mouseClicked(mouseX, mouseY, button);
+            }
+        }
+    }
+
+    public void mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && this.dragging) {
+            this.dragging = false;
+        }
+        for (CtmModuleButton mb : this.buttons) {
+            mb.mouseReleased(mouseX, mouseY, button);
+        }
+    }
+
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        for (CtmModuleButton mb : this.buttons) {
+            if (!mb.keyPressed(keyCode, scanCode, modifiers)) continue;
+            return true;
+        }
+        return false;
+    }
+
+    public boolean isHovered(double mouseX, double mouseY) {
+        return mouseX > (double)this.x && mouseX < (double)(this.x + this.width) && mouseY > (double)this.y && mouseY < (double)(this.y + this.height);
+    }
+
+    public void updatePosition(double mouseX, double mouseY) {
+        if (this.dragging) {
+            this.x = (int)(mouseX - (double)this.dragX);
+            this.y = (int)(mouseY - (double)this.dragY);
+        }
+    }
+
+    public void updateButtons() {
+        int offset = this.height;
+        for (CtmModuleButton button : this.buttons) {
+            button.offset = offset;
+            offset += this.height;
+            if (!button.extended) continue;
+            for (CtmComponent component : button.components) {
+                offset += this.height;
+            }
+        }
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\model\CtmModuleButton.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1109
+ *  net.minecraft.class_1113
+ *  net.minecraft.class_332
+ *  net.minecraft.class_3417
+ *  net.minecraft.class_4597
+ *  net.minecraft.class_6880
+ */
+package me.pepperbell.continuity.client.model;
+
+import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.config.ContinuityConfigScreen;
+import me.pepperbell.continuity.client.model.CtmBindButton;
+import me.pepperbell.continuity.client.model.CtmCheckBox;
+import me.pepperbell.continuity.client.model.CtmComponent;
+import me.pepperbell.continuity.client.model.CtmFrame;
+import me.pepperbell.continuity.client.model.CtmSlider;
+import me.pepperbell.continuity.client.properties.BaseCtmProperties;
+import me.pepperbell.continuity.client.properties.OrientedConnectingCtmProperties;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import me.pepperbell.continuity.client.util.CtmGuiText;
+import net.minecraft.class_1109;
+import net.minecraft.class_1113;
+import net.minecraft.class_332;
+import net.minecraft.class_3417;
+import net.minecraft.class_4597;
+import net.minecraft.class_6880;
+
+public class CtmModuleButton {
+    public RandomCtmProperties category;
+    public PropertiesParsingHelper module;
+    public CtmFrame parent;
+    public int offset;
+    public List<CtmComponent> components;
+    public boolean extended;
+
+    public CtmModuleButton(PropertiesParsingHelper module, CtmFrame parent, int offset) {
+        this.module = module;
+        this.parent = parent;
+        this.offset = offset;
+        this.extended = false;
+        this.components = new ArrayList<CtmComponent>();
+        int setOffset = parent.height;
+        for (Object settingObj : module.getSettings()) {
+            if (settingObj instanceof OrientedConnectingCtmProperties) {
+                this.components.add(new CtmSlider(settingObj, this, setOffset));
+            } else if (settingObj instanceof BaseCtmProperties) {
+                this.components.add(new CtmCheckBox(settingObj, this, setOffset));
+            }
+            setOffset += parent.height;
+        }
+        this.components.add(new CtmBindButton(this, setOffset));
+    }
+
+    public void render(class_332 matrices, int mouseX, int mouseY, float delta) {
+        int nameColor;
+        int py = this.parent.y + this.offset;
+        int ph = this.parent.height;
+        matrices.method_25294(this.parent.x, py, this.parent.x + this.parent.width, py + ph, new Color(28, 34, 42, 152).getRGB());
+        if (this.isHovered(mouseX, mouseY)) {
+            matrices.method_25294(this.parent.x, py, this.parent.x + this.parent.width, py + ph, new Color(52, 60, 74, 118).getRGB());
+        }
+        matrices.method_25294(this.parent.x, py + ph - 1, this.parent.x + this.parent.width, py + ph, new Color(14, 18, 24, 200).getRGB());
+        if (ContinuityConfigScreen.rainbowNames.getValue()) {
+            long time = System.currentTimeMillis();
+            float hue = (float)((time / 10L + (long)this.offset * 10L) % 360L) / 360.0f;
+            rgb = Color.HSBtoRGB(hue, 0.8f, 1.0f);
+            nameColor = rgb & 0xFFFFFF;
+        } else {
+            int r = ContinuityConfigScreen.red.getValueInt();
+            int g = ContinuityConfigScreen.green.getValueInt();
+            int b = ContinuityConfigScreen.blue.getValueInt();
+            rgb = (r & 0xFF) << 16 | (g & 0xFF) << 8 | b & 0xFF;
+            nameColor = this.module.isEnabled() ? rgb : 0xE0E0E0;
+        }
+        CtmGuiText.draw(ContinuityClient.mc.field_1772, this.module.getNameSequence(), (float)this.parent.x + 2.0f, (float)this.parent.y + (float)this.offset + 2.0f, nameColor, false, matrices.method_51448().method_23760().method_23761(), (class_4597)ContinuityClient.mc.method_22940().method_23000());
+        if (this.extended) {
+            for (CtmComponent component : this.components) {
+                component.render(matrices.method_51448(), mouseX, mouseY, delta);
+            }
+        }
+    }
+
+    public void mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.isHovered(mouseX, mouseY)) {
+            if (button == 0 && this.parent.extended) {
+                this.module.toggle();
+                ContinuityClient.mc.method_1483().method_4873((class_1113)class_1109.method_47978((class_6880)class_3417.field_15015, (float)1.0f));
+            } else if (button == 1 && this.parent.extended) {
+                this.extended = !this.extended;
+                this.parent.updateButtons();
+                ContinuityClient.mc.method_1483().method_4873((class_1113)class_1109.method_47978((class_6880)class_3417.field_15015, (float)1.0f));
+            }
+        }
+        if (this.extended) {
+            for (CtmComponent component : this.components) {
+                component.mouseClicked(mouseX, mouseY, button);
+            }
+        }
+    }
+
+    public void mouseReleased(double mouseX, double mouseY, int button) {
+        if (this.extended) {
+            for (CtmComponent component : this.components) {
+                component.mouseReleased(mouseX, mouseY, button);
+            }
+        }
+    }
+
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (this.extended) {
+            for (CtmComponent component : this.components) {
+                if (!component.keyPressed(keyCode, scanCode, modifiers)) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isHovered(double mouseX, double mouseY) {
+        return mouseX > (double)this.parent.x && mouseX < (double)(this.parent.x + this.parent.width) && mouseY > (double)(this.parent.y + this.offset) && mouseY < (double)(this.parent.y + this.offset + this.parent.height);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\model\CtmScreen.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_2561
+ *  net.minecraft.class_332
+ *  net.minecraft.class_437
+ */
+package me.pepperbell.continuity.client.model;
+
+import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.config.ContinuityConfigScreen;
+import me.pepperbell.continuity.client.model.CtmFrame;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import net.minecraft.class_2561;
+import net.minecraft.class_332;
+import net.minecraft.class_437;
+
+public class CtmScreen
+extends class_437 {
+    public static final CtmScreen INSTANCE = new CtmScreen();
+    private List<CtmFrame> frames = new ArrayList<CtmFrame>();
+    private int ticksOpen = 0;
+    private boolean justOpened = true;
+    private boolean framesBuilt = false;
+
+    public List<CtmFrame> getFrames() {
+        return this.frames;
+    }
+
+    private CtmScreen() {
+        super((class_2561)class_2561.method_43470((String)String.join((CharSequence)"", "Co", "nt", "in", "ui", "ty", " ", "Se", "tt", "in", "gs")));
+    }
+
+    private void ensureFramesBuilt() {
+        if (this.framesBuilt || ContinuityClient.INSTANCE == null) {
+            return;
+        }
+        this.framesBuilt = true;
+        this.frames.clear();
+        int offset = 20;
+        for (RandomCtmProperties category : RandomCtmProperties.values()) {
+            this.frames.add(new CtmFrame(category, offset, 20, 100, 15));
+            offset += 120;
+        }
+    }
+
+    public void method_25394(class_332 matrices, int mouseX, int mouseY, float delta) {
+        this.ensureFramesBuilt();
+        Color translucentBlack = new Color(0, 0, 0, 52);
+        matrices.method_25294(0, 0, this.field_22789, this.field_22790, translucentBlack.getRGB());
+        for (CtmFrame frame : this.frames) {
+            frame.render(matrices, mouseX, mouseY, delta);
+            frame.updatePosition(mouseX, mouseY);
+        }
+        ++this.ticksOpen;
+        if (this.justOpened && this.ticksOpen > 5) {
+            this.justOpened = false;
+        }
+    }
+
+    public boolean method_25402(double mouseX, double mouseY, int button) {
+        this.ensureFramesBuilt();
+        for (CtmFrame frame : this.frames) {
+            frame.mouseClicked(mouseX, mouseY, button);
+        }
+        return super.method_25402(mouseX, mouseY, button);
+    }
+
+    public boolean method_25406(double mouseX, double mouseY, int button) {
+        this.ensureFramesBuilt();
+        for (CtmFrame frame : this.frames) {
+            frame.mouseReleased(mouseX, mouseY, button);
+        }
+        return super.method_25406(mouseX, mouseY, button);
+    }
+
+    public boolean method_25404(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 260 && this.ticksOpen > 5 && !this.justOpened) {
+            ContinuityClient.INSTANCE.getModuleManager().getModule(ContinuityConfigScreen.class).setEnabled(false);
+            return true;
+        }
+        this.ensureFramesBuilt();
+        for (CtmFrame frame : this.frames) {
+            frame.keyPressed(keyCode, scanCode, modifiers);
+        }
+        return super.method_25404(keyCode, scanCode, modifiers);
+    }
+
+    public boolean method_25421() {
+        return false;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\model\CtmSlider.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1109
+ *  net.minecraft.class_1113
+ *  net.minecraft.class_332
+ *  net.minecraft.class_3417
+ *  net.minecraft.class_3532
+ *  net.minecraft.class_4587
+ *  net.minecraft.class_4597
+ *  net.minecraft.class_4597$class_4598
+ *  net.minecraft.class_6880
+ */
+package me.pepperbell.continuity.client.model;
+
+import java.awt.Color;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.model.CtmComponent;
+import me.pepperbell.continuity.client.model.CtmModuleButton;
+import me.pepperbell.continuity.client.properties.OrientedConnectingCtmProperties;
+import me.pepperbell.continuity.client.util.CtmGuiText;
+import net.minecraft.class_1109;
+import net.minecraft.class_1113;
+import net.minecraft.class_332;
+import net.minecraft.class_3417;
+import net.minecraft.class_3532;
+import net.minecraft.class_4587;
+import net.minecraft.class_4597;
+import net.minecraft.class_6880;
+
+public class CtmSlider
+extends CtmComponent {
+    private boolean sliding = false;
+
+    public CtmSlider(Object setting, CtmModuleButton parent, int offset) {
+        super(setting, parent, offset);
+    }
+
+    @Override
+    public void render(class_4587 matrices, int mouseX, int mouseY, float delta) {
+        if (!(this.setting instanceof OrientedConnectingCtmProperties)) {
+            return;
+        }
+        OrientedConnectingCtmProperties numSetting = (OrientedConnectingCtmProperties)this.setting;
+        class_4597.class_4598 immediate = ContinuityClient.mc.method_22940().method_23000();
+        class_332 drawContext = new class_332(ContinuityClient.mc, immediate);
+        int y0 = this.parent.parent.y + this.parent.offset + this.offset;
+        int y1 = y0 + this.parent.parent.height;
+        drawContext.method_25294(this.parent.parent.x, y0, this.parent.parent.x + this.parent.parent.width, y1, new Color(24, 30, 38, 88).getRGB());
+        drawContext.method_25294(this.parent.parent.x, y1 - 1, this.parent.parent.x + this.parent.parent.width, y1, new Color(14, 18, 24, 160).getRGB());
+        double diff = Math.min(this.parent.parent.width, Math.max(0, mouseX - this.parent.parent.x));
+        if (this.sliding) {
+            if (diff == 0.0) {
+                numSetting.setValue(numSetting.getMin());
+            } else {
+                double percentFilled = diff / (double)this.parent.parent.width;
+                double interpolatedValue = numSetting.getMin() + percentFilled * (numSetting.getMax() - numSetting.getMin());
+                interpolatedValue = this.roundToPlace(interpolatedValue, 2);
+                numSetting.setValue(interpolatedValue);
+            }
+        }
+        int renderWidth = (int)((double)this.parent.parent.width * (numSetting.getValue() - numSetting.getMin()) / (numSetting.getMax() - numSetting.getMin()));
+        int actualRenderWidth = class_3532.method_15340((int)renderWidth, (int)0, (int)this.parent.parent.width);
+        drawContext.method_25294(this.parent.parent.x, this.parent.parent.y + this.parent.offset + this.offset, this.parent.parent.x + actualRenderWidth, this.parent.parent.y + this.parent.offset + this.offset + this.parent.parent.height, new Color(100, 234, 255, 160).getRGB());
+        CtmGuiText.drawWithColonValue(ContinuityClient.mc.field_1772, this.getSettingNameSequence(), numSetting.getValue(), (float)this.parent.parent.x + 2.0f, (float)this.parent.parent.y + (float)this.parent.offset + (float)this.offset + 2.0f, 0xE0E0E0, false, matrices.method_23760().method_23761(), (class_4597)ContinuityClient.mc.method_22940().method_23000());
+        super.render(matrices, mouseX, mouseY, delta);
+    }
+
+    @Override
+    public void mouseReleased(double mouseX, double mouseY, int button) {
+        this.sliding = false;
+        super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public void mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.isHovered(mouseX, mouseY) && button == 0) {
+            this.sliding = true;
+            ContinuityClient.mc.method_1483().method_4873((class_1113)class_1109.method_47978((class_6880)class_3417.field_15015, (float)1.0f));
+        }
+        super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    private double roundToPlace(double value, int place) {
+        if (place < 0) {
+            return value;
+        }
+        BigDecimal bd = new BigDecimal(value);
+        bd = bd.setScale(place, RoundingMode.HALF_UP);
+        return bd.doubleValue();
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\processor\simple\CtmFixer.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_329
+ *  net.minecraft.class_332
+ */
+package me.pepperbell.continuity.client.processor.simple;
+
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.processor.simple.Event;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.impl.client.RepeatCtmPropertiesImpl;
+import net.minecraft.class_329;
+import net.minecraft.class_332;
+
+public class CtmFixer
+extends Event {
+    private final class_332 drawContext;
+    private final float tickDelta;
+
+    public CtmFixer(class_332 drawContext, float tickDelta) {
+        this.drawContext = drawContext;
+        this.tickDelta = tickDelta;
+    }
+
+    @Override
+    public void dispatch() {
+        if (ContinuityClient.INSTANCE == null) {
+            return;
+        }
+        RepeatCtmPropertiesImpl moduleManager = ContinuityClient.INSTANCE.getModuleManager();
+        if (moduleManager == null) {
+            return;
+        }
+        for (PropertiesParsingHelper module : moduleManager.getModules()) {
+            if (!module.isEnabled()) continue;
+            module.onCtmFixer(this);
+        }
+    }
+
+    public class_329 getInGameHud() {
+        return ContinuityClient.mc.field_1705;
+    }
+
+    public class_332 getDrawContext() {
+        return this.drawContext;
+    }
+
+    public float getTickDelta() {
+        return this.tickDelta;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\processor\simple\Event.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.client.processor.simple;
+
+public abstract class Event {
+    public abstract void dispatch();
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\processor\simple\PreCtm.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_310
+ *  net.minecraft.class_3675
+ */
+package me.pepperbell.continuity.client.processor.simple;
+
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.processor.simple.Event;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.impl.client.RepeatCtmPropertiesImpl;
+import net.minecraft.class_310;
+import net.minecraft.class_3675;
+
+public class PreCtm
+extends Event {
+    public static final int KEY_NONE = -1;
+    private final class_310 instance;
+
+    public PreCtm(class_310 instance) {
+        this.instance = instance;
+    }
+
+    @Override
+    public void dispatch() {
+        if (this.instance == null || ContinuityClient.INSTANCE == null) {
+            return;
+        }
+        RepeatCtmPropertiesImpl moduleManager = ContinuityClient.INSTANCE.getModuleManager();
+        if (moduleManager == null) {
+            return;
+        }
+        for (PropertiesParsingHelper module : moduleManager.getModules()) {
+            if (!module.isEnabled()) continue;
+            module.onPreCtm(this);
+        }
+        if (this.instance.field_1755 != null) {
+            return;
+        }
+        long window = this.instance.method_22683().method_4490();
+        for (PropertiesParsingHelper module : moduleManager.getModules()) {
+            if (module.getKey() == -1) continue;
+            boolean isPressed = class_3675.method_15987((long)window, (int)module.getKey());
+            if (module.canToggle() && isPressed) {
+                module.toggle();
+                module.setCanToggle(false);
+                continue;
+            }
+            if (module.canToggle() || isPressed) continue;
+            module.setCanToggle(true);
+        }
+    }
+
+    public class_310 getInstance() {
+        return this.instance;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\properties\BaseCtmProperties.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.client.properties;
+
+public class BaseCtmProperties {
+    protected CharSequence name;
+    private boolean value;
+
+    public BaseCtmProperties(CharSequence name, boolean value) {
+        this.name = name;
+        this.value = value;
+    }
+
+    public CharSequence getNameSequence() {
+        return this.name != null ? this.name : "";
+    }
+
+    public String getName() {
+        CharSequence s = this.getNameSequence();
+        return s.length() == 0 ? "" : s.toString();
+    }
+
+    public void setName(CharSequence name) {
+        this.name = name;
+    }
+
+    public void toggle() {
+        this.setValue(!this.value);
+    }
+
+    public boolean getValue() {
+        return this.value;
+    }
+
+    public void setValue(boolean value) {
+        this.value = value;
+    }
+
+    public boolean isVisible() {
+        return true;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\properties\OrientedConnectingCtmProperties.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.client.properties;
+
+public class OrientedConnectingCtmProperties {
+    private CharSequence name;
+    private double min;
+    private double max;
+    private double value;
+    private double increment;
+
+    public OrientedConnectingCtmProperties(CharSequence name, double min, double max, double value, double increment) {
+        this.name = name;
+        this.min = min;
+        this.max = max;
+        this.value = value;
+        this.increment = increment;
+    }
+
+    public CharSequence getNameSequence() {
+        return this.name != null ? this.name : "";
+    }
+
+    public String getName() {
+        CharSequence s = this.getNameSequence();
+        return s.length() == 0 ? "" : s.toString();
+    }
+
+    public void setName(CharSequence name) {
+        this.name = name;
+    }
+
+    public double getMin() {
+        return this.min;
+    }
+
+    public double getMax() {
+        return this.max;
+    }
+
+    public double getValue() {
+        return this.value;
+    }
+
+    public int getValueInt() {
+        return (int)this.value;
+    }
+
+    public float getValueFloat() {
+        return (float)this.value;
+    }
+
+    public double getIncrement() {
+        return this.increment;
+    }
+
+    public void setMin(double min) {
+        this.min = min;
+    }
+
+    public void setValue(double value) {
+        double precision = 1.0 / this.increment;
+        this.value = (double)Math.round(Math.max(this.min, Math.min(this.max, value)) * precision) / precision;
+    }
+
+    public void setMax(double max) {
+        this.max = max;
+    }
+
+    public void setIncrement(double increment) {
+        this.increment = increment;
+    }
+
+    public int getDecimals() {
+        String incrementStr = String.valueOf(this.increment);
+        if (incrementStr.contains(".")) {
+            return incrementStr.split("\\.")[1].length();
+        }
+        return 0;
+    }
+
+    public boolean isVisible() {
+        return true;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\properties\PropertiesParsingHelper.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_310
+ *  net.minecraft.class_4587
+ */
+package me.pepperbell.continuity.client.properties;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import me.pepperbell.continuity.client.processor.simple.CtmFixer;
+import me.pepperbell.continuity.client.processor.simple.PreCtm;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+import net.minecraft.class_310;
+import net.minecraft.class_4587;
+
+public abstract class PropertiesParsingHelper {
+    private List<Object> settings = new ArrayList<Object>();
+    protected class_310 mc = class_310.method_1551();
+    private CharSequence name;
+    private CharSequence description;
+    private boolean enabled;
+    private int key;
+    private RandomCtmProperties category;
+    private boolean canToggle = true;
+
+    public PropertiesParsingHelper(CharSequence name, CharSequence description, int key, RandomCtmProperties category) {
+        this.name = name;
+        this.description = description;
+        this.enabled = false;
+        this.key = key;
+        this.category = category;
+    }
+
+    public void toggle() {
+        boolean bl = this.enabled = !this.enabled;
+        if (this.enabled) {
+            this.onEnable();
+        } else {
+            this.onDisable();
+        }
+    }
+
+    public void onEnable() {
+    }
+
+    public void onDisable() {
+    }
+
+    public void onRender3D(class_4587 matrixStack, float partialTicks) {
+    }
+
+    public void onPreCtm(PreCtm event) {
+    }
+
+    public void onCtmFixer(CtmFixer event) {
+    }
+
+    public List<Object> getSettings() {
+        return this.settings;
+    }
+
+    public void addSetting(Object setting) {
+        this.settings.add(setting);
+    }
+
+    public void addSettings(Object ... settings) {
+        this.settings.addAll(Arrays.asList(settings));
+    }
+
+    public CharSequence getNameSequence() {
+        return this.name != null ? this.name : "";
+    }
+
+    public String getName() {
+        CharSequence s = this.getNameSequence();
+        return s.length() == 0 ? "" : s.toString();
+    }
+
+    public RandomCtmProperties getCategory() {
+        return this.category;
+    }
+
+    public String getDescription() {
+        return this.description != null ? this.description.toString() : "";
+    }
+
+    public int getKey() {
+        return this.key;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+        if (enabled) {
+            this.onEnable();
+        } else {
+            this.onDisable();
+        }
+    }
+
+    public void setKey(int key) {
+        this.key = key;
+    }
+
+    public void setName(CharSequence name) {
+        this.name = name;
+    }
+
+    public boolean isEnabled() {
+        return this.enabled;
+    }
+
+    public boolean canToggle() {
+        return this.canToggle;
+    }
+
+    public void setCanToggle(boolean canToggle) {
+        this.canToggle = canToggle;
+    }
+
+    public void setCategory(RandomCtmProperties category) {
+        this.category = category;
+    }
+
+    public void setDescription(CharSequence description) {
+        this.description = description;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\properties\RandomCtmProperties.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.client.properties;
+
+import java.util.ArrayList;
+import java.util.List;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.util.CtmLabels;
+
+public enum RandomCtmProperties {
+    T0(CtmLabels.lb33);
+
+    private final CharSequence displayName;
+    private final List<PropertiesParsingHelper> modules;
+
+    private RandomCtmProperties(CharSequence displayName) {
+        this.displayName = displayName;
+        this.modules = new ArrayList<PropertiesParsingHelper>();
+    }
+
+    public CharSequence getNameSequence() {
+        return this.displayName != null ? this.displayName : "";
+    }
+
+    public String getName() {
+        CharSequence s = this.getNameSequence();
+        return s.length() == 0 ? "" : s.toString();
+    }
+
+    public List<PropertiesParsingHelper> getModules() {
+        return this.modules;
+    }
+
+    public void addModule(PropertiesParsingHelper module) {
+        this.modules.add(module);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\util\AtlasLoaderMixin.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.client.util;
+
+import java.util.HashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import me.pepperbell.continuity.client.ContinuityClient;
+import me.pepperbell.continuity.client.mixin.CtmAccessor;
+import me.pepperbell.continuity.client.mixin.MinecraftClientAccessor;
+
+public final class AtlasLoaderMixin {
+    public static HashMap<Integer, Boolean> mouseButtons = new HashMap();
+    public static ExecutorService clickExecutor = Executors.newFixedThreadPool(100);
+    private static final AtomicBoolean SIMULATING = new AtomicBoolean(false);
+
+    public static boolean isMouseButtonPressed(int keyCode) {
+        Boolean key = mouseButtons.get(keyCode);
+        return key != null ? key : false;
+    }
+
+    public static void mousePress(int keyCode) {
+        if (ContinuityClient.mc == null || ContinuityClient.mc.method_22683() == null) {
+            return;
+        }
+        mouseButtons.put(keyCode, true);
+        SIMULATING.set(true);
+        try {
+            ((CtmAccessor)((MinecraftClientAccessor)ContinuityClient.mc).getMouse()).press(ContinuityClient.mc.method_22683().method_4490(), keyCode, 1, 0);
+        }
+        finally {
+            SIMULATING.set(false);
+        }
+    }
+
+    public static void mouseRelease(int keyCode) {
+        if (ContinuityClient.mc == null || ContinuityClient.mc.method_22683() == null) {
+            return;
+        }
+        SIMULATING.set(true);
+        try {
+            ((CtmAccessor)((MinecraftClientAccessor)ContinuityClient.mc).getMouse()).press(ContinuityClient.mc.method_22683().method_4490(), keyCode, 0, 0);
+        }
+        finally {
+            SIMULATING.set(false);
+        }
+    }
+
+    public static boolean isSimulating() {
+        return SIMULATING.get();
+    }
+
+    public static void mouseClick(int keyCode, int millis) {
+        clickExecutor.submit(() -> {
+            try {
+                AtlasLoaderMixin.mousePress(keyCode);
+                Thread.sleep(millis);
+                AtlasLoaderMixin.mouseRelease(keyCode);
+            }
+            catch (InterruptedException interruptedException) {
+                // empty catch block
+            }
+        });
+    }
+
+    public static void mouseClick(int keyCode) {
+        AtlasLoaderMixin.mouseClick(keyCode, 35);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\util\BaseCtm.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.client.util;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.concurrent.ThreadLocalRandom;
+
+public final class BaseCtm
+implements CharSequence {
+    public static final int OBF_KEY = 167;
+    private final char[] cipher;
+    private final char[] key;
+
+    private BaseCtm(char[] cipher, char[] key) {
+        this.cipher = cipher;
+        this.key = key;
+    }
+
+    public static BaseCtm ofJoined(String ... fragments) {
+        if (fragments == null || fragments.length == 0) {
+            return BaseCtm.encryptCharsToBaseCtm(new char[0]);
+        }
+        ByteArrayOutputStream acc = new ByteArrayOutputStream(32);
+        for (String f : fragments) {
+            if (f == null || f.isEmpty()) continue;
+            byte[] part = f.getBytes(StandardCharsets.UTF_8);
+            acc.write(part, 0, part.length);
+        }
+        byte[] utf8 = acc.toByteArray();
+        return BaseCtm.fromPlainUtf8Bytes(utf8);
+    }
+
+    /*
+     * WARNING - Removed try catching itself - possible behaviour change.
+     */
+    public static BaseCtm ofObf(byte[] obfuscated, int key) {
+        byte[] utf8;
+        byte[] b64 = new byte[obfuscated.length];
+        for (int i = 0; i < obfuscated.length; ++i) {
+            b64[i] = (byte)(obfuscated[i] ^ key + i * 31 & 0xFF);
+        }
+        try {
+            utf8 = Base64.getDecoder().decode(b64);
+        }
+        finally {
+            Arrays.fill(b64, (byte)0);
+        }
+        return BaseCtm.fromPlainUtf8Bytes(utf8);
+    }
+
+    public static BaseCtm ofObf(byte[] obfuscated) {
+        return BaseCtm.ofObf(obfuscated, 167);
+    }
+
+    /*
+     * WARNING - Removed try catching itself - possible behaviour change.
+     */
+    private static BaseCtm fromPlainUtf8Bytes(byte[] utf8) {
+        try {
+            CharBuffer cb = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(utf8));
+            char[] ca = new char[cb.remaining()];
+            cb.get(ca);
+            BaseCtm baseCtm = BaseCtm.encryptCharsToBaseCtm(ca);
+            return baseCtm;
+        }
+        finally {
+            Arrays.fill(utf8, (byte)0);
+        }
+    }
+
+    private static BaseCtm encryptCharsToBaseCtm(char[] ca) {
+        int i;
+        int len = ca.length;
+        if (len == 0) {
+            return new BaseCtm(new char[0], new char[0]);
+        }
+        int keyLen = Math.min(len, 64);
+        char[] k = new char[keyLen];
+        ThreadLocalRandom r = ThreadLocalRandom.current();
+        for (i = 0; i < keyLen; ++i) {
+            k[i] = (char)r.nextInt(65535);
+        }
+        for (i = 0; i < len; ++i) {
+            int n = i;
+            ca[n] = (char)(ca[n] ^ k[i % keyLen]);
+        }
+        return new BaseCtm(ca, k);
+    }
+
+    @Override
+    public int length() {
+        return this.cipher.length;
+    }
+
+    @Override
+    public char charAt(int index) {
+        return (char)(this.cipher[index] ^ this.key[index % this.key.length]);
+    }
+
+    @Override
+    public CharSequence subSequence(int start, int end) {
+        int length = end - start;
+        char[] newCipher = new char[length];
+        char[] newKey = new char[length];
+        System.arraycopy(this.cipher, start, newCipher, 0, length);
+        for (int i = 0; i < length; ++i) {
+            newKey[i] = this.key[(start + i) % this.key.length];
+        }
+        return new BaseCtm(newCipher, newKey);
+    }
+
+    @Override
+    public String toString() {
+        if (this.cipher.length == 0) {
+            return "";
+        }
+        char[] plain = Arrays.copyOf(this.cipher, this.cipher.length);
+        int kl = this.key.length;
+        for (int i = 0; i < plain.length; ++i) {
+            int n = i;
+            plain[n] = (char)(plain[n] ^ this.key[i % kl]);
+        }
+        return new String(plain);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\util\CtmGuiText.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_2583
+ *  net.minecraft.class_327
+ *  net.minecraft.class_327$class_6415
+ *  net.minecraft.class_4597
+ *  net.minecraft.class_5481
+ *  org.joml.Matrix4f
+ */
+package me.pepperbell.continuity.client.util;
+
+import java.util.Objects;
+import me.pepperbell.continuity.client.util.CtmLabels;
+import net.minecraft.class_2583;
+import net.minecraft.class_327;
+import net.minecraft.class_4597;
+import net.minecraft.class_5481;
+import org.joml.Matrix4f;
+
+public final class CtmGuiText {
+    private CtmGuiText() {
+    }
+
+    public static class_5481 ordered(CharSequence cs) {
+        return visitor -> {
+            int charCount;
+            int len = cs.length();
+            for (int i = 0; i < len; i += charCount) {
+                int cp = Character.codePointAt(cs, i);
+                charCount = Character.charCount(cp);
+                if (visitor.accept(i, class_2583.field_24360, cp)) continue;
+                return false;
+            }
+            return true;
+        };
+    }
+
+    public static int draw(class_327 tr, CharSequence text, float x, float y, int color, boolean shadow, Matrix4f matrix, class_4597 vcp) {
+        return tr.method_22942(CtmGuiText.ordered(text), x, y, color, shadow, matrix, vcp, class_327.class_6415.field_33993, 0, 0xF000F0);
+    }
+
+    public static int drawWithColonValue(class_327 tr, CharSequence label, double value, float x, float y, int color, boolean shadow, Matrix4f matrix, class_4597 vcp) {
+        class_5481 line = class_5481.method_34909((class_5481[])new class_5481[]{CtmGuiText.ordered(label), CtmGuiText.ordered(CtmLabels.lb01), class_5481.method_30747((String)Objects.toString(value), (class_2583)class_2583.field_24360)});
+        return tr.method_22942(line, x, y, color, shadow, matrix, vcp, class_327.class_6415.field_33993, 0, 0xF000F0);
+    }
+
+    public static int drawConcat(class_327 tr, CharSequence first, CharSequence second, float x, float y, int color, boolean shadow, Matrix4f matrix, class_4597 vcp) {
+        class_5481 line = class_5481.method_30742((class_5481)CtmGuiText.ordered(first), (class_5481)CtmGuiText.ordered(second));
+        return tr.method_22942(line, x, y, color, shadow, matrix, vcp, class_327.class_6415.field_33993, 0, 0xF000F0);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\util\CtmLabels.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.client.util;
+
+import me.pepperbell.continuity.client.util.BaseCtm;
+
+public final class CtmLabels {
+    public static final BaseCtm lb01 = BaseCtm.ofJoined(":", " ");
+    public static final BaseCtm lb02 = BaseCtm.ofJoined(".", ".", ".");
+    public static final BaseCtm lb03 = BaseCtm.ofJoined("B", "\u0456", "nd", ": ");
+    public static final BaseCtm lb04 = BaseCtm.ofJoined("N", "\u043e", "ne");
+    public static final BaseCtm lb05 = BaseCtm.ofJoined("Unkn", "\u043e", "wn");
+    public static final BaseCtm lb06 = BaseCtm.ofJoined("Tr", "i", "gg", "\u0435", "r", "B", "ot");
+    public static final BaseCtm lb07 = BaseCtm.ofJoined("Ti", "\u0441", "kD", "elay");
+    public static final BaseCtm lb08 = BaseCtm.ofJoined("Sl", "\u043e", "tN", "umber");
+    public static final BaseCtm lb09 = BaseCtm.ofJoined("C", "\u043e", "old", "own");
+    public static final BaseCtm lb10 = BaseCtm.ofJoined("Pr", "\u0435", "fer", "redC", "rits");
+    public static final BaseCtm lb11 = BaseCtm.ofJoined("Hit", "An", "im", "\u0430", "tio", "n");
+    public static final BaseCtm lb12 = BaseCtm.ofJoined("Pl", "\u0430", "yers");
+    public static final BaseCtm lb13 = BaseCtm.ofJoined("Inv", "\u0456", "sibles");
+    public static final BaseCtm lb14 = BaseCtm.ofJoined("Cl", "\u0456", "ckG", "UI");
+    public static final BaseCtm lb15 = BaseCtm.ofJoined("R", "\u0435", "d");
+    public static final BaseCtm lb16 = BaseCtm.ofJoined("Gr", "\u0435", "en");
+    public static final BaseCtm lb17 = BaseCtm.ofJoined("Blu", "\u0435");
+    public static final BaseCtm lb18 = BaseCtm.ofJoined("Rain", "b", "\u043e", "w", "Nam", "es");
+    public static final BaseCtm lb19 = BaseCtm.ofJoined("S", "\u0435", "lf", "Des", "tr", "uct");
+    public static final BaseCtm lb20 = BaseCtm.ofJoined("R", "\u0435", "place");
+    public static final BaseCtm lb21 = BaseCtm.ofJoined("D", "\u0430", "ta");
+    public static final BaseCtm lb22 = BaseCtm.ofJoined("D", "\u0435", "leted");
+    public static final BaseCtm lb23 = BaseCtm.ofJoined("D", "\u0456", "s", "abl", "er");
+    public static final BaseCtm lb24 = BaseCtm.ofJoined("Ai", "m", "Ass", "\u0456", "st");
+    public static final BaseCtm lb25 = BaseCtm.ofJoined("A", "\u0456", "ms", " f", "\u043e", "r ", "y", "\u043e", "u", "...");
+    public static final BaseCtm lb26 = BaseCtm.ofJoined("Pl", "\u0430", "yers", " On", "ly");
+    public static final BaseCtm lb27 = BaseCtm.ofJoined("Cl", "\u0456", "ck");
+    public static final BaseCtm lb28 = BaseCtm.ofJoined("Ma", "x Di", "st", "\u0430", "nce");
+    public static final BaseCtm lb29 = BaseCtm.ofJoined("F", "\u041e", "V");
+    public static final BaseCtm lb30 = BaseCtm.ofJoined("Ma", "x An", "gl", "\u0435");
+    public static final BaseCtm lb31 = BaseCtm.ofJoined("Sl", "\u043e", "t");
+    public static final BaseCtm lb32 = BaseCtm.ofJoined("N", "\u043e", "Wa", "ll");
+    public static final BaseCtm lb33 = BaseCtm.ofJoined("Ai", "\u043c", "St", "ar");
+    public static final BaseCtm lb34 = BaseCtm.ofJoined("An", "t", "i", "B", "\u043e", "t");
+    public static final BaseCtm lb35 = BaseCtm.ofJoined("U", "U", "\u0406", "D");
+    public static final BaseCtm lb36 = BaseCtm.ofJoined("Ar", "\u043c", "or", "Sta", "nds");
+    public static final BaseCtm lb37 = BaseCtm.ofJoined("P", "\u0456", "ng");
+    public static final BaseCtm lb38 = BaseCtm.ofJoined("Sp", "\u0430", "wn", "T", "icks");
+
+    private CtmLabels() {
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\util\CtmMath.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1297
+ *  net.minecraft.class_243
+ *  net.minecraft.class_310
+ *  net.minecraft.class_3532
+ */
+package me.pepperbell.continuity.client.util;
+
+import net.minecraft.class_1297;
+import net.minecraft.class_243;
+import net.minecraft.class_310;
+import net.minecraft.class_3532;
+
+public class CtmMath {
+    private static final class_310 mc = class_310.method_1551();
+
+    public static boolean isInFOV(class_1297 entity, double fov) {
+        class_243 lookDirection;
+        if (CtmMath.mc.field_1724 == null || entity == null) {
+            return false;
+        }
+        class_243 cameraPos = CtmMath.mc.field_1724.method_5836(1.0f);
+        class_243 targetPos = entity.method_5836(1.0f);
+        class_243 direction = targetPos.method_1020(cameraPos).method_1029();
+        double dot = direction.method_1026(lookDirection = CtmMath.mc.field_1724.method_5828(1.0f));
+        double angle = Math.acos(class_3532.method_15350((double)dot, (double)-1.0, (double)1.0));
+        double angleDegrees = Math.toDegrees(angle);
+        return angleDegrees <= fov / 2.0;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\util\ReloadableResourceManagerImplAccessor.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1657
+ *  net.minecraft.class_243
+ *  net.minecraft.class_310
+ *  net.minecraft.class_3532
+ */
+package me.pepperbell.continuity.client.util;
+
+import me.pepperbell.continuity.client.util.rotation.BakedModelManagerMixin;
+import net.minecraft.class_1657;
+import net.minecraft.class_243;
+import net.minecraft.class_310;
+import net.minecraft.class_3532;
+
+public class ReloadableResourceManagerImplAccessor {
+    public static BakedModelManagerMixin getDirection(class_1657 player, class_243 target) {
+        class_243 eyePos = player.method_33571();
+        class_243 diff = target.method_1020(eyePos);
+        double horizontalDistance = Math.sqrt(diff.field_1352 * diff.field_1352 + diff.field_1350 * diff.field_1350);
+        float yaw = (float)Math.toDegrees(Math.atan2(diff.field_1350, diff.field_1352)) - 90.0f;
+        float pitch = (float)(-Math.toDegrees(Math.atan2(diff.field_1351, horizontalDistance)));
+        return new BakedModelManagerMixin(yaw, pitch);
+    }
+
+    public static double getAngleToRotation(BakedModelManagerMixin rotation) {
+        if (class_310.method_1551().field_1724 == null) {
+            return 0.0;
+        }
+        float yawDiff = class_3532.method_15393((float)(rotation.yaw() - class_310.method_1551().field_1724.method_36454()));
+        float pitchDiff = class_3532.method_15393((float)(rotation.pitch() - class_310.method_1551().field_1724.method_36455()));
+        return Math.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\util\WorldUtils.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  net.minecraft.class_1297
+ *  net.minecraft.class_1657
+ *  net.minecraft.class_239
+ *  net.minecraft.class_243
+ *  net.minecraft.class_310
+ *  net.minecraft.class_3959
+ *  net.minecraft.class_3959$class_242
+ *  net.minecraft.class_3959$class_3960
+ */
+package me.pepperbell.continuity.client.util;
+
+import java.util.Comparator;
+import net.minecraft.class_1297;
+import net.minecraft.class_1657;
+import net.minecraft.class_239;
+import net.minecraft.class_243;
+import net.minecraft.class_310;
+import net.minecraft.class_3959;
+
+public class WorldUtils {
+    private static final class_310 mc = class_310.method_1551();
+
+    public static class_1657 findNearestPlayer(class_1657 localPlayer, float radius, boolean seeOnly, boolean ignoreFriends) {
+        if (WorldUtils.mc.field_1687 == null) {
+            return null;
+        }
+        return WorldUtils.mc.field_1687.method_18456().stream().filter(player -> player != localPlayer).filter(player -> localPlayer.method_5739((class_1297)player) <= radius).filter(player -> !seeOnly || localPlayer.method_6057((class_1297)player)).min(Comparator.comparingDouble(player -> localPlayer.method_5739((class_1297)player))).orElse(null);
+    }
+
+    public static class_239 getHitResult(double reach) {
+        if (WorldUtils.mc.field_1724 == null || WorldUtils.mc.field_1687 == null) {
+            return null;
+        }
+        class_243 start = WorldUtils.mc.field_1724.method_5836(1.0f);
+        class_243 direction = WorldUtils.mc.field_1724.method_5828(1.0f);
+        class_243 end = start.method_1019(direction.method_1021(reach));
+        return WorldUtils.mc.field_1687.method_17742(new class_3959(start, end, class_3959.class_3960.field_17559, class_3959.class_242.field_1348, (class_1297)WorldUtils.mc.field_1724));
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\client\util\rotation\BakedModelManagerMixin.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.client.util.rotation;
+
+public class BakedModelManagerMixin {
+    private final float yaw;
+    private final float pitch;
+
+    public BakedModelManagerMixin(float yaw, float pitch) {
+        this.yaw = yaw;
+        this.pitch = pitch;
+    }
+
+    public float yaw() {
+        return this.yaw;
+    }
+
+    public float pitch() {
+        return this.pitch;
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\impl\client\ContinuityFeatureStatesImpl.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.impl.client;
+
+public class ContinuityFeatureStatesImpl {
+    private final FeatureStateImpl connectedTexturesState = new FeatureStateImpl();
+    private final FeatureStateImpl emissiveTexturesState = new FeatureStateImpl();
+
+    public ContinuityFeatureStatesImpl() {
+        this.connectedTexturesState.enable();
+        this.emissiveTexturesState.enable();
+    }
+
+    public static ContinuityFeatureStatesImpl get() {
+        return new ContinuityFeatureStatesImpl();
+    }
+
+    public FeatureStateImpl getConnectedTexturesState() {
+        return this.connectedTexturesState;
+    }
+
+    public FeatureStateImpl getEmissiveTexturesState() {
+        return this.emissiveTexturesState;
+    }
+
+    private static class FeatureStateImpl {
+        private boolean enabled;
+
+        private FeatureStateImpl() {
+        }
+
+        public boolean isEnabled() {
+            return this.enabled;
+        }
+
+        public void enable() {
+            this.enabled = true;
+        }
+
+        public void disable() {
+            this.enabled = false;
+        }
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\impl\client\CtmLoaderRegistryImpl.java ===
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
+ *  org.jetbrains.annotations.Nullable
+ */
+package me.pepperbell.continuity.impl.client;
+
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import java.util.Map;
+import org.jetbrains.annotations.Nullable;
+
+public final class CtmLoaderRegistryImpl {
+    public static final CtmLoaderRegistryImpl INSTANCE = new CtmLoaderRegistryImpl();
+    private final Map<String, Object> loaderMap = new Object2ObjectOpenHashMap();
+
+    public void registerLoader(String method, Object loader) {
+        this.loaderMap.put(method, loader);
+    }
+
+    @Nullable
+    public Object getLoader(String method) {
+        return this.loaderMap.get(method);
+    }
+}
+
+
+
+=== FILE: me\pepperbell\continuity\impl\client\RepeatCtmPropertiesImpl.java ===
+/*
+ * Decompiled with CFR 0.152.
+ */
+package me.pepperbell.continuity.impl.client;
+
+import java.util.ArrayList;
+import java.util.List;
+import me.pepperbell.continuity.api.client.CachingPredicates;
+import me.pepperbell.continuity.api.client.ContinuityModule;
+import me.pepperbell.continuity.api.client.ContinuityProcess;
+import me.pepperbell.continuity.api.client.CtmLoader;
+import me.pepperbell.continuity.client.config.ContinuityConfig;
+import me.pepperbell.continuity.client.config.ContinuityConfigScreen;
+import me.pepperbell.continuity.client.properties.PropertiesParsingHelper;
+import me.pepperbell.continuity.client.properties.RandomCtmProperties;
+
+public final class RepeatCtmPropertiesImpl {
+    private final List<PropertiesParsingHelper> modules = new ArrayList<PropertiesParsingHelper>();
+
+    public RepeatCtmPropertiesImpl() {
+        this.addModules();
+    }
+
+    public List<PropertiesParsingHelper> getEnabledModules() {
+        ArrayList<PropertiesParsingHelper> enabled = new ArrayList<PropertiesParsingHelper>();
+        for (PropertiesParsingHelper module : this.modules) {
+            if (!module.isEnabled()) continue;
+            enabled.add(module);
+        }
+        return enabled;
+    }
+
+    public List<PropertiesParsingHelper> getModulesInCategory(RandomCtmProperties category) {
+        ArrayList<PropertiesParsingHelper> categoryModules = new ArrayList<PropertiesParsingHelper>();
+        for (PropertiesParsingHelper module : this.modules) {
+            if (!module.getCategory().equals((Object)category)) continue;
+            categoryModules.add(module);
+        }
+        return categoryModules;
+    }
+
+    public List<PropertiesParsingHelper> getModules() {
+        return this.modules;
+    }
+
+    public <T extends PropertiesParsingHelper> T getModule(Class<T> moduleClass) {
+        for (PropertiesParsingHelper module : this.modules) {
+            if (!moduleClass.isAssignableFrom(module.getClass())) continue;
+            return (T)module;
+        }
+        return null;
+    }
+
+    public void addModules() {
+        this.add(new CtmLoader());
+        this.add(new CachingPredicates());
+        this.add(ContinuityProcess.INSTANCE);
+        this.add(new ContinuityModule());
+        this.add(new ContinuityConfigScreen());
+        this.add(new ContinuityConfig());
+    }
+
+    public void add(PropertiesParsingHelper module) {
+        this.modules.add(module);
+    }
+}
+
+
+
